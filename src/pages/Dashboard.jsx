@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [nudge, setNudge] = useState("");
   const [nudgeLoading, setNudgeLoading] = useState(true);
+  const [suggestion, setSuggestion] = useState(null);
   const queryClient = useQueryClient();
   const today = format(new Date(), "yyyy-MM-dd");
 
@@ -73,7 +74,31 @@ export default function Dashboard() {
     return count;
   }, [recentLogs]);
 
-  // Generate nudge
+  // Calculate habit completion rates for analysis
+  const habitAnalysis = useMemo(() => {
+    return habits.map((h) => {
+      const habitLogs = recentLogs.filter((l) => l.habit_id === h.id);
+      const last7Days = recentLogs.filter((l) => {
+        const logDate = new Date(l.date);
+        const daysAgo = (new Date() - logDate) / (1000 * 60 * 60 * 24);
+        return daysAgo <= 7 && l.habit_id === h.id;
+      });
+      const totalCheckins = habitLogs.reduce((acc, l) => acc + (l.count || 1), 0);
+      const last7Checkins = last7Days.reduce((acc, l) => acc + (l.count || 1), 0);
+      const avgPerDay = last7Days.length > 0 ? last7Checkins / 7 : 0;
+      const completionRate = h.target_count ? (avgPerDay / h.target_count) * 100 : 0;
+      return {
+        name: h.name,
+        category: h.category,
+        target: h.target_count || 1,
+        avgPerDay: avgPerDay.toFixed(1),
+        completionRate: completionRate.toFixed(0),
+        totalCheckins,
+      };
+    });
+  }, [habits, recentLogs]);
+
+  // Generate nudge and personalized suggestions
   useEffect(() => {
     const generateNudge = async () => {
       setNudgeLoading(true);
@@ -91,33 +116,63 @@ export default function Dashboard() {
 
       if (habits.length === 0 || recentLogs.length < 5) {
         setNudge(defaultNudges[Math.floor(Math.random() * defaultNudges.length)]);
+        setSuggestion(null);
         setNudgeLoading(false);
         return;
       }
 
       try {
+        const analysisText = habitAnalysis.map(
+          (h) => `${h.name} (${h.category}): ${h.completionRate}% completion rate, averaging ${h.avgPerDay}/${h.target} per day`
+        ).join("\n");
+
         const res = await base44.integrations.Core.InvokeLLM({
-          prompt: `You are a gentle, supportive ADHD habit coach. Generate ONE short micro-nudge (max 20 words) based on this data:
-          - Time of day: ${timeOfDay}
-          - Habits today: ${completedToday}/${totalTarget} completed
-          - Momentum streak: ${momentumDays} days
-          - Total habits tracked: ${habits.length}
-          Be warm, specific, zero-pressure. No exclamation marks. No toxic positivity.`,
+          prompt: `You are a gentle, supportive ADHD habit coach analyzing user behavior to provide personalized insights and goal suggestions.
+
+Current data:
+- Time of day: ${timeOfDay}
+- Habits today: ${completedToday}/${totalTarget} completed
+- Momentum streak: ${momentumDays} days
+- Total habits tracked: ${habits.length}
+
+Last 7 days habit performance:
+${analysisText}
+
+Generate:
+1. A short micro-nudge (max 20 words) - warm, specific, zero-pressure. No exclamation marks. No toxic positivity.
+2. A personalized goal suggestion based on their patterns. Consider:
+   - If they consistently hit a habit goal (>80% completion), suggest a related new habit or slight increase
+   - If they struggle with a habit (<40% completion), suggest modifications or smaller targets
+   - If they're doing well overall, suggest a complementary habit from a category they don't have yet
+   - Keep suggestions realistic and ADHD-friendly (small, specific, achievable)
+
+Format the suggestion as a friendly observation + specific actionable suggestion (max 30 words).`,
           response_json_schema: {
             type: "object",
             properties: {
               nudge: { type: "string" },
+              suggestion: { type: "string" },
+              suggested_habit: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  category: { type: "string" },
+                  target_count: { type: "number" },
+                },
+              },
             },
           },
         });
         setNudge(res.nudge);
+        setSuggestion(res.suggestion);
       } catch {
         setNudge(defaultNudges[Math.floor(Math.random() * defaultNudges.length)]);
+        setSuggestion(null);
       }
       setNudgeLoading(false);
     };
     if (habits.length >= 0) generateNudge();
-  }, [habits.length, todayLogs.length]);
+  }, [habits.length, todayLogs.length, recentLogs.length]);
 
   const checkInMutation = useMutation({
     mutationFn: async (habit) => {
@@ -174,7 +229,7 @@ export default function Dashboard() {
       {/* Momentum + Nudge */}
       <div className="space-y-3 mb-8">
         <MomentumBadge days={momentumDays} />
-        <NudgeCard message={nudge} isLoading={nudgeLoading} />
+        <NudgeCard message={nudge} isLoading={nudgeLoading} suggestion={suggestion} />
       </div>
 
       {/* Task Paralysis Button */}
