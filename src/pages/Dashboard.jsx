@@ -1,0 +1,239 @@
+import React, { useState, useEffect, useMemo } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
+import { format, subDays, isToday, parseISO } from "date-fns";
+import { Plus, AlertCircle } from "lucide-react";
+import HabitCard from "../components/habits/HabitCard";
+import MomentumBadge from "../components/habits/MomentumBadge";
+import NudgeCard from "../components/habits/NudgeCard";
+import AddHabitDialog from "../components/habits/AddHabitDialog";
+import TaskParalysisButton from "../components/habits/TaskParalysisButton";
+
+const getTimeOfDay = () => {
+  const h = new Date().getHours();
+  if (h < 12) return "morning";
+  if (h < 17) return "afternoon";
+  if (h < 21) return "evening";
+  return "night";
+};
+
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  if (h < 21) return "Good evening";
+  return "Wind down time";
+};
+
+export default function Dashboard() {
+  const [showAddHabit, setShowAddHabit] = useState(false);
+  const [nudge, setNudge] = useState("");
+  const [nudgeLoading, setNudgeLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const today = format(new Date(), "yyyy-MM-dd");
+
+  const { data: habits = [] } = useQuery({
+    queryKey: ["habits"],
+    queryFn: () => base44.entities.Habit.filter({ is_active: true }, "sort_order"),
+  });
+
+  const { data: todayLogs = [] } = useQuery({
+    queryKey: ["habit-logs-today", today],
+    queryFn: () => base44.entities.HabitLog.filter({ date: today }),
+  });
+
+  const { data: recentLogs = [] } = useQuery({
+    queryKey: ["habit-logs-recent"],
+    queryFn: () => base44.entities.HabitLog.list("-date", 200),
+  });
+
+  // Calculate momentum days (consecutive days with at least 1 completion, soft reset)
+  const momentumDays = useMemo(() => {
+    if (!recentLogs.length) return 0;
+    const logsByDate = {};
+    recentLogs.forEach((log) => {
+      if (!logsByDate[log.date]) logsByDate[log.date] = 0;
+      logsByDate[log.date] += log.count || 1;
+    });
+    let count = 0;
+    let d = new Date();
+    // Check today first
+    const todayStr = format(d, "yyyy-MM-dd");
+    if (logsByDate[todayStr]) count++;
+    // Check previous days
+    for (let i = 1; i < 60; i++) {
+      const dateStr = format(subDays(d, i), "yyyy-MM-dd");
+      if (logsByDate[dateStr]) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }, [recentLogs]);
+
+  // Generate nudge
+  useEffect(() => {
+    const generateNudge = async () => {
+      setNudgeLoading(true);
+      const completedToday = todayLogs.reduce((acc, l) => acc + (l.count || 1), 0);
+      const totalTarget = habits.reduce((acc, h) => acc + (h.target_count || 1), 0);
+      const timeOfDay = getTimeOfDay();
+      
+      const defaultNudges = [
+        "Start small — even one check-in counts. You're already here.",
+        "Remember: progress isn't linear. Small steps compound.",
+        "Tip: pair a new habit with something you already do daily.",
+        "Your brain loves novelty — try doing a familiar habit in a new spot today.",
+        "2-minute rule: if it takes less than 2 minutes, do it now.",
+      ];
+
+      if (habits.length === 0 || recentLogs.length < 5) {
+        setNudge(defaultNudges[Math.floor(Math.random() * defaultNudges.length)]);
+        setNudgeLoading(false);
+        return;
+      }
+
+      try {
+        const res = await base44.integrations.Core.InvokeLLM({
+          prompt: `You are a gentle, supportive ADHD habit coach. Generate ONE short micro-nudge (max 20 words) based on this data:
+          - Time of day: ${timeOfDay}
+          - Habits today: ${completedToday}/${totalTarget} completed
+          - Momentum streak: ${momentumDays} days
+          - Total habits tracked: ${habits.length}
+          Be warm, specific, zero-pressure. No exclamation marks. No toxic positivity.`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              nudge: { type: "string" },
+            },
+          },
+        });
+        setNudge(res.nudge);
+      } catch {
+        setNudge(defaultNudges[Math.floor(Math.random() * defaultNudges.length)]);
+      }
+      setNudgeLoading(false);
+    };
+    if (habits.length >= 0) generateNudge();
+  }, [habits.length, todayLogs.length]);
+
+  const checkInMutation = useMutation({
+    mutationFn: async (habit) => {
+      const existing = todayLogs.find((l) => l.habit_id === habit.id);
+      if (existing) {
+        await base44.entities.HabitLog.update(existing.id, {
+          count: (existing.count || 1) + 1,
+        });
+      } else {
+        await base44.entities.HabitLog.create({
+          habit_id: habit.id,
+          date: today,
+          count: 1,
+          time_of_day: getTimeOfDay(),
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["habit-logs-today"] });
+      queryClient.invalidateQueries({ queryKey: ["habit-logs-recent"] });
+    },
+  });
+
+  const getCountForHabit = (habitId) => {
+    const log = todayLogs.find((l) => l.habit_id === habitId);
+    return log ? log.count || 1 : 0;
+  };
+
+  const completedCount = habits.filter(
+    (h) => getCountForHabit(h.id) >= (h.target_count || 1)
+  ).length;
+
+  return (
+    <div className="max-w-lg mx-auto px-4 py-8 md:py-12">
+      {/* Header */}
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }} 
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <p className="text-[#71717A] text-xs uppercase tracking-[0.2em] font-medium">
+          {format(new Date(), "EEEE, MMM d")}
+        </p>
+        <h1 className="text-2xl font-semibold text-[#F5F2EB] mt-1">
+          {getGreeting()}
+        </h1>
+        {habits.length > 0 && (
+          <p className="text-sm text-[#52525B] mt-1">
+            {completedCount}/{habits.length} habits done
+          </p>
+        )}
+      </motion.div>
+
+      {/* Momentum + Nudge */}
+      <div className="space-y-3 mb-8">
+        <MomentumBadge days={momentumDays} />
+        <NudgeCard message={nudge} isLoading={nudgeLoading} />
+      </div>
+
+      {/* Task Paralysis Button */}
+      <TaskParalysisButton habits={habits} onCheckIn={(h) => checkInMutation.mutate(h)} />
+
+      {/* Habits */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xs uppercase tracking-[0.2em] text-[#71717A] font-semibold">
+            Today's Habits
+          </h2>
+          <button
+            onClick={() => setShowAddHabit(true)}
+            className="p-1.5 rounded-lg hover:bg-[#18181B] transition-colors text-[#71717A] hover:text-[#F5F2EB]"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+
+        {habits.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-[#18181B] flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="w-5 h-5 text-[#52525B]" />
+            </div>
+            <p className="text-sm text-[#71717A]">No habits yet</p>
+            <button
+              onClick={() => setShowAddHabit(true)}
+              className="mt-3 text-sm text-[#5EEAD4] hover:text-[#5EEAD4]/80 transition-colors"
+            >
+              Add your first habit
+            </button>
+          </motion.div>
+        ) : (
+          <div className="grid gap-3">
+            <AnimatePresence>
+              {habits.map((habit, i) => (
+                <motion.div
+                  key={habit.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <HabitCard
+                    habit={habit}
+                    todayCount={getCountForHabit(habit.id)}
+                    onCheckIn={() => checkInMutation.mutate(habit)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+
+      <AddHabitDialog open={showAddHabit} onClose={() => setShowAddHabit(false)} />
+    </div>
+  );
+}
