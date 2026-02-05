@@ -10,6 +10,7 @@ import NudgeCard from "../components/habits/NudgeCard";
 import AddHabitDialog from "../components/habits/AddHabitDialog";
 import TaskParalysisButton from "../components/habits/TaskParalysisButton";
 import SuggestionHistoryModal from "../components/habits/SuggestionHistoryModal";
+import WelcomeMessage from "../components/onboarding/WelcomeMessage";
 
 const getTimeOfDay = () => {
   const h = new Date().getHours();
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const [editingHabit, setEditingHabit] = useState(null);
   const [showSuggestionHistory, setShowSuggestionHistory] = useState(false);
   const [currentSuggestionId, setCurrentSuggestionId] = useState(null);
+  const [showWelcome, setShowWelcome] = useState(false);
   const queryClient = useQueryClient();
   const today = format(new Date(), "yyyy-MM-dd");
 
@@ -58,6 +60,14 @@ export default function Dashboard() {
     queryKey: ["ai-suggestions"],
     queryFn: () => base44.entities.AISuggestion.list("-date", 50),
   });
+
+  // Check if first time user
+  useEffect(() => {
+    const hasSeenWelcome = localStorage.getItem("drift_welcome_seen");
+    if (!hasSeenWelcome && habits.length === 0 && !isLoading) {
+      setShowWelcome(true);
+    }
+  }, [habits, isLoading]);
 
   // Calculate momentum days (consecutive days with at least 1 completion, soft reset)
   const momentumDays = useMemo(() => {
@@ -253,6 +263,17 @@ Format the suggestion as a friendly observation + specific actionable suggestion
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8 md:py-12">
+      {/* Welcome overlay */}
+      {showWelcome && (
+        <WelcomeMessage
+          onGetStarted={() => {
+            localStorage.setItem("drift_welcome_seen", "true");
+            setShowWelcome(false);
+            setShowAddHabit(true);
+          }}
+        />
+      )}
+
       {/* Header */}
       <motion.div 
         initial={{ opacity: 0, y: -10 }} 

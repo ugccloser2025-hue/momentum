@@ -86,6 +86,7 @@ export default function Journal() {
                   setShowForm(false);
                   setCurrentPrompt("");
                 }}
+                isSubmitting={createMutation.isPending}
               />
             </div>
           )}

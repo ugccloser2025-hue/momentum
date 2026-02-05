@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Droplets, Pill, Coffee, Zap, Target } from "lucide-react";
+import { Check, Droplets, Pill, Coffee, Zap, Target, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const categoryIcons = {
   focus: Zap,
@@ -18,7 +19,7 @@ const categoryColors = {
   quick_wins: { bg: "bg-[#34D399]/10", border: "border-[#34D399]/20", text: "text-[#34D399]", ring: "ring-[#34D399]" },
 };
 
-export default function HabitCard({ habit, todayCount, onCheckIn }) {
+export default function HabitCard({ habit, todayCount, onCheckIn, onEdit, onDelete }) {
   const Icon = categoryIcons[habit.category] || Zap;
   const colors = categoryColors[habit.category] || categoryColors.focus;
   const isComplete = todayCount >= (habit.target_count || 1);
@@ -59,12 +60,30 @@ export default function HabitCard({ habit, todayCount, onCheckIn }) {
           </div>
         </div>
 
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-          isComplete 
-            ? `${colors.bg} ${colors.text}` 
-            : "border border-[#3F3F46]"
-        }`}>
-          {isComplete && <Check className="w-4 h-4" />}
+        <div className="flex items-center gap-2">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+            isComplete 
+              ? `${colors.bg} ${colors.text}` 
+              : "border border-[#3F3F46]"
+          }`}>
+            {isComplete && <Check className="w-4 h-4" />}
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger onClick={(e) => e.stopPropagation()} className="p-1 rounded hover:bg-[#27272A] transition-colors">
+              <MoreVertical className="w-4 h-4 text-[#71717A]" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-[#18181B] border-[#27272A]">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-[#A1A1AA] focus:text-[#F5F2EB] focus:bg-[#27272A]">
+                <Pencil className="w-3.5 h-3.5 mr-2" />
+                Edit habit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(habit); }} className="text-[#FB7185] focus:text-[#FB7185] focus:bg-[#FB7185]/10">
+                <Trash2 className="w-3.5 h-3.5 mr-2" />
+                Delete habit
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

@@ -12,7 +12,7 @@ const moods = [
   { value: "rough", label: "Rough", icon: Frown, color: "#71717A" },
 ];
 
-export default function JournalEntryForm({ habits, initialPrompt, onSubmit, onCancel }) {
+export default function JournalEntryForm({ habits, initialPrompt, onSubmit, onCancel, isSubmitting }) {
   const [content, setContent] = useState(initialPrompt ? `${initialPrompt}\n\n` : "");
   const [mood, setMood] = useState("okay");
   const [selectedHabits, setSelectedHabits] = useState([]);
@@ -108,10 +108,10 @@ export default function JournalEntryForm({ habits, initialPrompt, onSubmit, onCa
       <div className="flex gap-3 pt-2">
         <Button
           onClick={handleSubmit}
-          disabled={!content.trim()}
-          className="flex-1 bg-[#5EEAD4] hover:bg-[#5EEAD4]/90 text-[#0D0D0F] font-semibold rounded-xl"
+          disabled={!content.trim() || isSubmitting}
+          className="flex-1 bg-[#5EEAD4] hover:bg-[#5EEAD4]/90 text-[#0D0D0F] font-semibold rounded-xl disabled:opacity-50"
         >
-          Save entry
+          {isSubmitting ? "Saving..." : "Save entry"}
         </Button>
         {onCancel && (
           <Button
