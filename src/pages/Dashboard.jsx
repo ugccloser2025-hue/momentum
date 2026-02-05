@@ -64,10 +64,10 @@ export default function Dashboard() {
   // Check if first time user
   useEffect(() => {
     const hasSeenWelcome = localStorage.getItem("drift_welcome_seen");
-    if (!hasSeenWelcome && habits.length === 0 && !isLoading) {
+    if (!hasSeenWelcome && habits.length === 0) {
       setShowWelcome(true);
     }
-  }, [habits, isLoading]);
+  }, [habits]);
 
   // Calculate momentum days (consecutive days with at least 1 completion, soft reset)
   const momentumDays = useMemo(() => {
@@ -252,6 +252,13 @@ Format the suggestion as a friendly observation + specific actionable suggestion
     },
   });
 
+  const deleteHabitMutation = useMutation({
+    mutationFn: (habitId) => base44.entities.Habit.delete(habitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["habits"] });
+    },
+  });
+
   const getCountForHabit = (habitId) => {
     const log = todayLogs.find((l) => l.habit_id === habitId);
     return log ? log.count || 1 : 0;
@@ -304,9 +311,18 @@ Format the suggestion as a friendly observation + specific actionable suggestion
         </div>
       </motion.div>
 
-      {/* Momentum + Nudge */}
-      <div className="space-y-3 mb-8">
-        <MomentumBadge days={momentumDays} />
+      {/* Momentum + Task Paralysis Button */}
+      {habits.length > 0 && (
+        <div className="flex gap-3 mb-6">
+          <div className="flex-1">
+            <MomentumBadge days={momentumDays} />
+          </div>
+          <TaskParalysisButton habits={habits} onCheckIn={(h) => checkInMutation.mutate(h)} />
+        </div>
+      )}
+
+      {/* Nudge */}
+      <div className="mb-8">
         <NudgeCard 
           message={nudge} 
           isLoading={nudgeLoading} 
@@ -340,9 +356,6 @@ Format the suggestion as a friendly observation + specific actionable suggestion
           }}
         />
       </div>
-
-      {/* Task Paralysis Button */}
-      <TaskParalysisButton habits={habits} onCheckIn={(h) => checkInMutation.mutate(h)} />
 
       {/* Habits */}
       <div className="mt-8">
@@ -389,6 +402,15 @@ Format the suggestion as a friendly observation + specific actionable suggestion
                     habit={habit}
                     todayCount={getCountForHabit(habit.id)}
                     onCheckIn={() => checkInMutation.mutate(habit)}
+                    onEdit={(h) => {
+                      setEditingHabit(h);
+                      setShowAddHabit(true);
+                    }}
+                    onDelete={(h) => {
+                      if (confirm(`Delete "${h.name}"? This will remove all logs for this habit.`)) {
+                        deleteHabitMutation.mutate(h.id);
+                      }
+                    }}
                   />
                 </motion.div>
               ))}
