@@ -51,6 +51,8 @@ import Dashboard from './pages/Dashboard';
 import Focus from './pages/Focus';
 import Insights from './pages/Insights';
 import Export from './pages/Export';
+import Journal from './pages/Journal';
+import History from './pages/History';
 import __Layout from './Layout.jsx';
 
 
@@ -59,6 +61,8 @@ export const PAGES = {
     "Focus": Focus,
     "Insights": Insights,
     "Export": Export,
+    "Journal": Journal,
+    "History": History,
 }
 
 export const pagesConfig = {

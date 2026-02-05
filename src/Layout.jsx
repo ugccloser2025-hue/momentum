@@ -6,6 +6,8 @@ import {
   Timer, 
   BarChart3, 
   FileDown,
+  BookOpen,
+  Clock,
   Menu,
   X,
   Zap
@@ -14,6 +16,8 @@ import {
 const navItems = [
   { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
   { name: "Focus", icon: Timer, page: "Focus" },
+  { name: "Journal", icon: BookOpen, page: "Journal" },
+  { name: "History", icon: Clock, page: "History" },
   { name: "Insights", icon: BarChart3, page: "Insights" },
   { name: "Export", icon: FileDown, page: "Export" },
 ];
