@@ -53,6 +53,7 @@ import Insights from './pages/Insights';
 import Export from './pages/Export';
 import Journal from './pages/Journal';
 import History from './pages/History';
+import Settings from './pages/Settings';
 import __Layout from './Layout.jsx';
 
 
@@ -63,6 +64,7 @@ export const PAGES = {
     "Export": Export,
     "Journal": Journal,
     "History": History,
+    "Settings": Settings,
 }
 
 export const pagesConfig = {

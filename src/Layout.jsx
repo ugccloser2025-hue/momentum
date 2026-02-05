@@ -10,7 +10,8 @@ import {
   Clock,
   Menu,
   X,
-  Zap
+  Zap,
+  Settings as SettingsIcon
 } from "lucide-react";
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { name: "History", icon: Clock, page: "History" },
   { name: "Insights", icon: BarChart3, page: "Insights" },
   { name: "Export", icon: FileDown, page: "Export" },
+  { name: "Settings", icon: SettingsIcon, page: "Settings" },
 ];
 
 export default function Layout({ children, currentPageName }) {
