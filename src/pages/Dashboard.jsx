@@ -3,12 +3,13 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, subDays, isToday, parseISO } from "date-fns";
-import { Plus, AlertCircle } from "lucide-react";
+import { Plus, AlertCircle, History } from "lucide-react";
 import HabitCard from "../components/habits/HabitCard";
 import MomentumBadge from "../components/habits/MomentumBadge";
 import NudgeCard from "../components/habits/NudgeCard";
 import AddHabitDialog from "../components/habits/AddHabitDialog";
 import TaskParalysisButton from "../components/habits/TaskParalysisButton";
+import SuggestionHistoryModal from "../components/habits/SuggestionHistoryModal";
 
 const getTimeOfDay = () => {
   const h = new Date().getHours();
@@ -33,6 +34,8 @@ export default function Dashboard() {
   const [suggestion, setSuggestion] = useState(null);
   const [prefilledHabit, setPrefilledHabit] = useState(null);
   const [editingHabit, setEditingHabit] = useState(null);
+  const [showSuggestionHistory, setShowSuggestionHistory] = useState(false);
+  const [currentSuggestionId, setCurrentSuggestionId] = useState(null);
   const queryClient = useQueryClient();
   const today = format(new Date(), "yyyy-MM-dd");
 
@@ -49,6 +52,11 @@ export default function Dashboard() {
   const { data: recentLogs = [] } = useQuery({
     queryKey: ["habit-logs-recent"],
     queryFn: () => base44.entities.HabitLog.list("-date", 200),
+  });
+
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ["ai-suggestions"],
+    queryFn: () => base44.entities.AISuggestion.list("-date", 50),
   });
 
   // Calculate momentum days (consecutive days with at least 1 completion, soft reset)
@@ -142,18 +150,23 @@ ${analysisText}
 
 Generate:
 1. A short micro-nudge (max 20 words) - warm, specific, zero-pressure. No exclamation marks. No toxic positivity.
-2. A personalized goal suggestion based on their patterns. Consider:
+2. A personalized goal suggestion based on their patterns with clear reasoning. Consider:
    - If they consistently hit a habit goal (>80% completion), suggest a related new habit or slight increase
    - If they struggle with a habit (<40% completion), suggest modifications or smaller targets
    - If they're doing well overall, suggest a complementary habit from a category they don't have yet
    - Keep suggestions realistic and ADHD-friendly (small, specific, achievable)
 
-Format the suggestion as a friendly observation + specific actionable suggestion (max 30 words).`,
+Format the suggestion as a friendly observation + specific actionable suggestion (max 30 words).
+3. Provide clear reasoning (1-2 sentences) explaining the data pattern that led to this suggestion.`,
           response_json_schema: {
             type: "object",
             properties: {
               nudge: { type: "string" },
               suggestion: { type: "string" },
+              reasoning: { 
+                type: "string",
+                description: "Why this suggestion was made based on the data"
+              },
               action_type: { 
                 type: "string",
                 enum: ["add_new", "modify_existing"],
@@ -175,12 +188,29 @@ Format the suggestion as a friendly observation + specific actionable suggestion
           },
         });
         setNudge(res.nudge);
+        
+        // Save suggestion to database
+        const savedSuggestion = await base44.entities.AISuggestion.create({
+          suggestion_text: res.suggestion,
+          reasoning: res.reasoning,
+          action_type: res.action_type,
+          suggested_habit: res.suggested_habit,
+          existing_habit_name: res.existing_habit_name,
+          status: "active",
+          date: today,
+        });
+        
+        setCurrentSuggestionId(savedSuggestion.id);
         setSuggestion({
+          id: savedSuggestion.id,
           message: res.suggestion,
+          reasoning: res.reasoning,
           action_type: res.action_type,
           suggested_habit: res.suggested_habit,
           existing_habit_name: res.existing_habit_name,
         });
+        
+        queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
       } catch {
         setNudge(defaultNudges[Math.floor(Math.random() * defaultNudges.length)]);
         setSuggestion(null);
@@ -229,17 +259,28 @@ Format the suggestion as a friendly observation + specific actionable suggestion
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <p className="text-[#71717A] text-xs uppercase tracking-[0.2em] font-medium">
-          {format(new Date(), "EEEE, MMM d")}
-        </p>
-        <h1 className="text-2xl font-semibold text-[#F5F2EB] mt-1">
-          {getGreeting()}
-        </h1>
-        {habits.length > 0 && (
-          <p className="text-sm text-[#52525B] mt-1">
-            {completedCount}/{habits.length} habits done
-          </p>
-        )}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[#71717A] text-xs uppercase tracking-[0.2em] font-medium">
+              {format(new Date(), "EEEE, MMM d")}
+            </p>
+            <h1 className="text-2xl font-semibold text-[#F5F2EB] mt-1">
+              {getGreeting()}
+            </h1>
+            {habits.length > 0 && (
+              <p className="text-sm text-[#52525B] mt-1">
+                {completedCount}/{habits.length} habits done
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => setShowSuggestionHistory(true)}
+            className="p-2 rounded-lg hover:bg-[#18181B] transition-colors text-[#71717A] hover:text-[#F5F2EB]"
+            title="Suggestion history"
+          >
+            <History className="w-4 h-4" />
+          </button>
+        </div>
       </motion.div>
 
       {/* Momentum + Nudge */}
@@ -249,15 +290,31 @@ Format the suggestion as a friendly observation + specific actionable suggestion
           message={nudge} 
           isLoading={nudgeLoading} 
           suggestion={suggestion}
-          onAddHabit={(habitData) => {
+          onAddHabit={async (habitData) => {
             setPrefilledHabit(habitData);
             setShowAddHabit(true);
+            if (currentSuggestionId) {
+              await base44.entities.AISuggestion.update(currentSuggestionId, { status: "acted_on" });
+              queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
+            }
           }}
-          onModifyHabit={(habitName) => {
+          onModifyHabit={async (habitName) => {
             const habit = habits.find(h => h.name === habitName);
             if (habit) {
               setEditingHabit(habit);
               setShowAddHabit(true);
+              if (currentSuggestionId) {
+                await base44.entities.AISuggestion.update(currentSuggestionId, { status: "acted_on" });
+                queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
+              }
+            }
+          }}
+          onDismiss={async () => {
+            if (currentSuggestionId) {
+              await base44.entities.AISuggestion.update(currentSuggestionId, { status: "dismissed" });
+              queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
+              setSuggestion(null);
+              setCurrentSuggestionId(null);
             }
           }}
         />
@@ -328,6 +385,26 @@ Format the suggestion as a friendly observation + specific actionable suggestion
         }}
         prefilledData={prefilledHabit}
         editingHabit={editingHabit}
+      />
+
+      <SuggestionHistoryModal
+        open={showSuggestionHistory}
+        onClose={() => setShowSuggestionHistory(false)}
+        suggestions={suggestions}
+        habits={habits}
+        onAddHabit={(habitData) => {
+          setPrefilledHabit(habitData);
+          setShowAddHabit(true);
+          setShowSuggestionHistory(false);
+        }}
+        onModifyHabit={(habitName) => {
+          const habit = habits.find(h => h.name === habitName);
+          if (habit) {
+            setEditingHabit(habit);
+            setShowAddHabit(true);
+            setShowSuggestionHistory(false);
+          }
+        }}
       />
     </div>
   );
