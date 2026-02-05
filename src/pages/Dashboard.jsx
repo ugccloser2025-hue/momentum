@@ -31,6 +31,8 @@ export default function Dashboard() {
   const [nudge, setNudge] = useState("");
   const [nudgeLoading, setNudgeLoading] = useState(true);
   const [suggestion, setSuggestion] = useState(null);
+  const [prefilledHabit, setPrefilledHabit] = useState(null);
+  const [editingHabit, setEditingHabit] = useState(null);
   const queryClient = useQueryClient();
   const today = format(new Date(), "yyyy-MM-dd");
 
@@ -152,6 +154,11 @@ Format the suggestion as a friendly observation + specific actionable suggestion
             properties: {
               nudge: { type: "string" },
               suggestion: { type: "string" },
+              action_type: { 
+                type: "string",
+                enum: ["add_new", "modify_existing"],
+                description: "Whether to suggest adding a new habit or modifying an existing one"
+              },
               suggested_habit: {
                 type: "object",
                 properties: {
@@ -160,11 +167,20 @@ Format the suggestion as a friendly observation + specific actionable suggestion
                   target_count: { type: "number" },
                 },
               },
+              existing_habit_name: {
+                type: "string",
+                description: "If action_type is modify_existing, name of the habit to modify"
+              },
             },
           },
         });
         setNudge(res.nudge);
-        setSuggestion(res.suggestion);
+        setSuggestion({
+          message: res.suggestion,
+          action_type: res.action_type,
+          suggested_habit: res.suggested_habit,
+          existing_habit_name: res.existing_habit_name,
+        });
       } catch {
         setNudge(defaultNudges[Math.floor(Math.random() * defaultNudges.length)]);
         setSuggestion(null);
@@ -229,7 +245,22 @@ Format the suggestion as a friendly observation + specific actionable suggestion
       {/* Momentum + Nudge */}
       <div className="space-y-3 mb-8">
         <MomentumBadge days={momentumDays} />
-        <NudgeCard message={nudge} isLoading={nudgeLoading} suggestion={suggestion} />
+        <NudgeCard 
+          message={nudge} 
+          isLoading={nudgeLoading} 
+          suggestion={suggestion}
+          onAddHabit={(habitData) => {
+            setPrefilledHabit(habitData);
+            setShowAddHabit(true);
+          }}
+          onModifyHabit={(habitName) => {
+            const habit = habits.find(h => h.name === habitName);
+            if (habit) {
+              setEditingHabit(habit);
+              setShowAddHabit(true);
+            }
+          }}
+        />
       </div>
 
       {/* Task Paralysis Button */}
@@ -288,7 +319,16 @@ Format the suggestion as a friendly observation + specific actionable suggestion
         )}
       </div>
 
-      <AddHabitDialog open={showAddHabit} onClose={() => setShowAddHabit(false)} />
+      <AddHabitDialog 
+        open={showAddHabit} 
+        onClose={() => {
+          setShowAddHabit(false);
+          setPrefilledHabit(null);
+          setEditingHabit(null);
+        }}
+        prefilledData={prefilledHabit}
+        editingHabit={editingHabit}
+      />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Sparkles, TrendingUp } from "lucide-react";
+import { Sparkles, TrendingUp, Plus, Edit3 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export default function NudgeCard({ message, isLoading, suggestion }) {
+export default function NudgeCard({ message, isLoading, suggestion, onAddHabit, onModifyHabit }) {
   return (
     <div className="space-y-3">
       <motion.div
@@ -46,7 +47,27 @@ export default function NudgeCard({ message, isLoading, suggestion }) {
               <p className="text-[10px] uppercase tracking-widest text-[#71717A] font-semibold mb-1.5">
                 Goal suggestion
               </p>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">{suggestion}</p>
+              <p className="text-sm text-[#A1A1AA] leading-relaxed mb-3">{suggestion.message}</p>
+              
+              {suggestion.action_type === "add_new" && suggestion.suggested_habit && (
+                <Button
+                  onClick={() => onAddHabit(suggestion.suggested_habit)}
+                  className="h-8 px-3 rounded-lg bg-[#34D399]/10 hover:bg-[#34D399]/20 text-[#34D399] border border-[#34D399]/30 text-xs font-medium"
+                >
+                  <Plus className="w-3 h-3 mr-1.5" />
+                  Add this habit
+                </Button>
+              )}
+              
+              {suggestion.action_type === "modify_existing" && suggestion.existing_habit_name && (
+                <Button
+                  onClick={() => onModifyHabit(suggestion.existing_habit_name)}
+                  className="h-8 px-3 rounded-lg bg-[#FCD34D]/10 hover:bg-[#FCD34D]/20 text-[#FCD34D] border border-[#FCD34D]/30 text-xs font-medium"
+                >
+                  <Edit3 className="w-3 h-3 mr-1.5" />
+                  Modify habit
+                </Button>
+              )}
             </div>
           </div>
         </motion.div>

@@ -25,14 +25,38 @@ const presets = [
   { name: "Deep breaths", category: "breaks", target_count: 3 },
 ];
 
-export default function AddHabitDialog({ open, onClose }) {
+export default function AddHabitDialog({ open, onClose, prefilledData, editingHabit }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("focus");
   const [targetCount, setTargetCount] = useState(1);
   const queryClient = useQueryClient();
 
+  // Pre-fill form when dialog opens with data
+  React.useEffect(() => {
+    if (open) {
+      if (editingHabit) {
+        setName(editingHabit.name);
+        setCategory(editingHabit.category);
+        setTargetCount(editingHabit.target_count || 1);
+      } else if (prefilledData) {
+        setName(prefilledData.name || "");
+        setCategory(prefilledData.category || "focus");
+        setTargetCount(prefilledData.target_count || 1);
+      } else {
+        setName("");
+        setCategory("focus");
+        setTargetCount(1);
+      }
+    }
+  }, [open, prefilledData, editingHabit]);
+
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Habit.create(data),
+    mutationFn: (data) => {
+      if (editingHabit) {
+        return base44.entities.Habit.update(editingHabit.id, data);
+      }
+      return base44.entities.Habit.create(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["habits"] });
       setName("");
@@ -79,7 +103,9 @@ export default function AddHabitDialog({ open, onClose }) {
         >
           {/* Header */}
           <div className="flex items-center justify-between p-5 border-b border-[#27272A]">
-            <h2 className="text-lg font-semibold text-[#F5F2EB]">New habit</h2>
+            <h2 className="text-lg font-semibold text-[#F5F2EB]">
+              {editingHabit ? "Edit habit" : "New habit"}
+            </h2>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#27272A] transition-colors text-[#71717A]">
               <X className="w-4 h-4" />
             </button>
@@ -170,7 +196,9 @@ export default function AddHabitDialog({ open, onClose }) {
               disabled={!name.trim() || createMutation.isPending}
               className="w-full bg-[#5EEAD4] hover:bg-[#5EEAD4]/90 text-[#0D0D0F] font-semibold rounded-xl h-11"
             >
-              {createMutation.isPending ? "Creating..." : "Add habit"}
+              {createMutation.isPending 
+                ? (editingHabit ? "Updating..." : "Creating...") 
+                : (editingHabit ? "Update habit" : "Add habit")}
             </Button>
           </div>
         </motion.div>
