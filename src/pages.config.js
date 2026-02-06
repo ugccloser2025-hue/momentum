@@ -48,22 +48,22 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Dashboard from './pages/Dashboard';
-import Focus from './pages/Focus';
-import Insights from './pages/Insights';
 import Export from './pages/Export';
-import Journal from './pages/Journal';
+import Focus from './pages/Focus';
 import History from './pages/History';
+import Insights from './pages/Insights';
+import Journal from './pages/Journal';
 import Settings from './pages/Settings';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Dashboard": Dashboard,
-    "Focus": Focus,
-    "Insights": Insights,
     "Export": Export,
-    "Journal": Journal,
+    "Focus": Focus,
     "History": History,
+    "Insights": Insights,
+    "Journal": Journal,
     "Settings": Settings,
 }
 

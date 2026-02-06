@@ -35,6 +35,7 @@ export default function Settings() {
     const newMode = !darkMode;
     setDarkMode(newMode);
     localStorage.setItem("drift_theme", newMode ? "dark" : "light");
+    window.dispatchEvent(new Event("themeChange"));
     toast.success(newMode ? "Dark mode enabled" : "Light mode enabled");
   };
 
